@@ -76,6 +76,11 @@ func TrimLeadingSQLComments(data []byte) ([]byte, error) {
 			continue
 		}
 
+		// skip psql restrict/unrestrict meta-commands
+		if bytes.HasPrefix(line, []byte(`\restrict`)) || bytes.HasPrefix(line, []byte(`\unrestrict`)) {
+			continue
+		}
+
 		// header section is over
 		preamble = false
 

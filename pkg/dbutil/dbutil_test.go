@@ -26,14 +26,27 @@ func TestDatabaseName(t *testing.T) {
 }
 
 func TestTrimLeadingSQLComments(t *testing.T) {
-	in := "--\n" +
-		"-- foo\n\n" +
-		"-- bar\n\n" +
-		"real stuff\n" +
-		"-- end\n"
-	out, err := dbutil.TrimLeadingSQLComments([]byte(in))
-	require.NoError(t, err)
-	require.Equal(t, "real stuff\n-- end\n", string(out))
+	t.Run("leading comments", func(t *testing.T) {
+		in := "--\n" +
+			"-- foo\n\n" +
+			"-- bar\n\n" +
+			"real stuff\n" +
+			"-- end\n"
+		out, err := dbutil.TrimLeadingSQLComments([]byte(in))
+		require.NoError(t, err)
+		require.Equal(t, "real stuff\n-- end\n", string(out))
+	})
+
+	t.Run("restrict/unrestrict meta-commands", func(t *testing.T) {
+		in := `\restrict abc123
+-- comment
+real stuff
+\unrestrict abc123
+`
+		out, err := dbutil.TrimLeadingSQLComments([]byte(in))
+		require.NoError(t, err)
+		require.Equal(t, "real stuff\n", string(out))
+	})
 }
 
 // connect to in-memory sqlite database for testing
