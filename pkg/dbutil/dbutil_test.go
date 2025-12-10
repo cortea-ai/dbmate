@@ -47,6 +47,56 @@ real stuff
 		require.NoError(t, err)
 		require.Equal(t, "real stuff\n", string(out))
 	})
+
+	t.Run("empty search_path fix for sqlc", func(t *testing.T) {
+		in := `-- comment
+SELECT pg_catalog.set_config('search_path', '', false);
+SET check_function_bodies = false;
+`
+		out, err := dbutil.TrimLeadingSQLComments([]byte(in))
+		require.NoError(t, err)
+		require.Equal(t, "SELECT pg_catalog.set_config('search_path', 'public', false);\nSET check_function_bodies = false;\n", string(out))
+	})
+
+	t.Run("strip public schema prefix for sqlc", func(t *testing.T) {
+		in := `-- comment
+SELECT pg_catalog.set_config('search_path', '', false);
+CREATE TYPE public.language AS ENUM ('ENGLISH', 'GERMAN');
+CREATE TABLE public.projects (
+    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
+    language public.language NOT NULL
+);
+`
+		out, err := dbutil.TrimLeadingSQLComments([]byte(in))
+		require.NoError(t, err)
+		expected := `SELECT pg_catalog.set_config('search_path', 'public', false);
+CREATE TYPE language AS ENUM ('ENGLISH', 'GERMAN');
+CREATE TABLE projects (
+    id uuid DEFAULT uuid_generate_v4() NOT NULL,
+    language language NOT NULL
+);
+`
+		require.Equal(t, expected, string(out))
+	})
+
+	t.Run("preserve public. inside string literals", func(t *testing.T) {
+		in := `-- comment
+SELECT pg_catalog.set_config('search_path', '', false);
+CREATE TABLE public.config (
+    url text DEFAULT 'https://public.example.com' NOT NULL,
+    description text DEFAULT 'public.schema' NOT NULL
+);
+`
+		out, err := dbutil.TrimLeadingSQLComments([]byte(in))
+		require.NoError(t, err)
+		expected := `SELECT pg_catalog.set_config('search_path', 'public', false);
+CREATE TABLE config (
+    url text DEFAULT 'https://public.example.com' NOT NULL,
+    description text DEFAULT 'public.schema' NOT NULL
+);
+`
+		require.Equal(t, expected, string(out))
+	})
 }
 
 // connect to in-memory sqlite database for testing

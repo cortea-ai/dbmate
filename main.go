@@ -311,7 +311,11 @@ func getDatabaseURL(c *cli.Context) (u *url.URL, err error) {
 	// check --url flag first
 	value := c.String("url")
 	if value == "" {
-		// if empty, default to --env or DATABASE_URL
+		// check CORTEA_MIGRATIONS_DATABASE_URL first
+		value = os.Getenv("CORTEA_MIGRATIONS_DATABASE_URL")
+	}
+	if value == "" {
+		// fallback to --env (default: DATABASE_URL)
 		env := c.String("env")
 		value = os.Getenv(env)
 	}

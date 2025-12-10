@@ -19,6 +19,36 @@ type Transaction interface {
 	QueryRow(query string, args ...interface{}) *sql.Row
 }
 
+// stripSchemaPrefix removes "public." schema prefix while preserving string literals
+// This is needed for sqlc compatibility - it can't parse schema-qualified type names
+func stripSchemaPrefix(line []byte) []byte {
+	result := make([]byte, 0, len(line))
+	inQuote := false
+	prefix := []byte("public.")
+	prefixLen := len(prefix)
+
+	for i := 0; i < len(line); {
+		// Toggle quote state on single quotes (handles SQL strings)
+		if line[i] == '\'' {
+			inQuote = !inQuote
+			result = append(result, line[i])
+			i++
+			continue
+		}
+
+		// Only strip "public." when outside quotes
+		if !inQuote && i+prefixLen <= len(line) && bytes.Equal(line[i:i+prefixLen], prefix) {
+			i += prefixLen // skip "public."
+			continue
+		}
+
+		result = append(result, line[i])
+		i++
+	}
+
+	return result
+}
+
 // DatabaseName returns the database name from a URL
 func DatabaseName(u *url.URL) string {
 	name := u.Path
@@ -80,6 +110,15 @@ func TrimLeadingSQLComments(data []byte) ([]byte, error) {
 		if bytes.HasPrefix(line, []byte(`\restrict`)) || bytes.HasPrefix(line, []byte(`\unrestrict`)) {
 			continue
 		}
+
+		// fix empty search_path for sqlc compatibility
+		if bytes.Equal(line, []byte(`SELECT pg_catalog.set_config('search_path', '', false);`)) {
+			line = []byte(`SELECT pg_catalog.set_config('search_path', 'public', false);`)
+		}
+
+		// strip public. schema prefix for sqlc compatibility
+		// with search_path='public', unqualified names resolve correctly
+		line = stripSchemaPrefix(line)
 
 		// header section is over
 		preamble = false
